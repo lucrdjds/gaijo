@@ -1,85 +1,47 @@
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <stdio.h>
-#include <pthread.h>
-#include <time.h>
-#include <semaphore.h>
+library IEEE;
+use IEEE.Std_Logic_1164.all;
 
-int produzir(int value);    //< definida em helper.c
-void consumir(int produto); //< definida em helper.c
-void *produtor_func(void *arg);
-void *consumidor_func(void *arg);
+entity sequence is
+port (
+ S: in std_Logic_vector(3 downto 0);
 
-int indice_produtor, indice_consumidor, tamanho_buffer;
-int* buffer;
-pthread_t thread1, thread2;
-sem_t sem1;
+ Control: in std_logic_vector(1 downto 0);
+ Out_hex: out std_logic_vector(6 downto 0);
+ Out_bin: out std_logic_vector(3 downto 0);
+ 
+ enter: in std_logic;
+ clock: in std_logic;
+ reset: in std_logic
+ );
+ 
+end entity;
+architecture circuito of sequence is
 
-//Você deve fazer as alterações necessárias nesta função e na função
-//consumidor_func para que usem semáforos para coordenar a produção
-//e consumo de elementos do buffer.
-void *produtor_func(void *arg) {
-    //arg contem o número de itens a serem produzidos
+component decod is
+port (C: in std_logic_vector(3 downto 0);
+ F: out std_logic_vector(6 downto 0)
+ );
+end component;
 
-    int max = *((int*)arg);
-    for (int i = 0; i <= max; ++i) {
-        int produto;
-        if (i == max)
-            produto = -1;          //envia produto sinlizando FIM
-        else 
-            produto = produzir(i); //produz um elemento normal
-        
-        indice_produtor = (indice_produtor + 1) % tamanho_buffer; //calcula posição próximo elemento
-        buffer[indice_produtor] = produto; //adiciona o elemento produzido à lista
-        sem_post(&sem1);
-    }
-    pthread_exit(NULL);
+component registrador is
+port (CLK, RST: in std_logic;
+D: in std_logic_vector(3 downto 0);
+EN: in std_logic;
+Q: out std_logic_vector(3 downto 0)); 
+end component;
+ signal bin: std_logic_vector(3 downto 0);
+ signal qprox: std_logic_vector(3 downto 0);
+ begin
+	bin(3) <= (( S(2) and (not S(1))) or (S(2) AND (NOT S(0)) ) OR ((NOT S(3)) AND S(1) AND S(0))); 
+	bin(2) <= (( S(2) and (not S(1))) or ( S(2) AND (NOT S(0)) ) OR ((NOT S(3)) AND S(1) AND S(0))); 
+	bin(1) <= (( S(0) and (not S(1))) or ( S(1) AND (NOT S(0)) )); 
+	bin(0) <= (NOT S(0));
+	
+	Out_bin <= bin;
+	
+	REG: registrador port map (clock, reset, S, enter, qprox);
+	decoder: decod port map (bin, out_hex);
+	
+	
 
-}
-
-void *consumidor_func(void *arg) {
-    while (1) {
-        sem_wait(&sem1);
-        indice_consumidor = (indice_consumidor + 1) % tamanho_buffer; //Calcula o próximo item a consumir
-        int produto = buffer[indice_consumidor]; 
-        if (produto >= 0) {
-            consumir(produto); //Consome o item obtido.
-        }
-        else {
-            break; //produto < 0 é um sinal de que o consumidor deve parar
-        }
-    }
-    pthread_exit(NULL);
-
-}
-
-int main(int argc, char *argv[]) {
-    if (argc < 3) {
-        printf("Uso: %s tamanho_buffer itens_produzidos\n", argv[0]);
-        return 0;
-    }
-
-    tamanho_buffer = atoi(argv[1]);
-    int n_itens = atoi(argv[2]);
-    printf("n_itens: %d\n", n_itens);
-
-    //Iniciando buffer
-    indice_produtor = 0;
-    indice_consumidor = 0;
-    buffer = malloc(sizeof(int) * tamanho_buffer);
-
-    /* Inicializando os semaforos */
-    sem_init(&sem1, 0, tamanho_buffer);
-    /* Construção de pthreads. */
-    pthread_create(&thread2, NULL, produtor_func, (void *)&n_itens);
-    pthread_create(&thread1, NULL, consumidor_func, NULL);
-
-    pthread_join(thread2, NULL);
-    pthread_join(thread1, NULL);
-    /* Destroi os semaforos. */
-    sem_destroy(&sem1);
-    /* Liberando o espaço de memoria. */
-    free(buffer);
-    return 0;
-}
+end circuito;
